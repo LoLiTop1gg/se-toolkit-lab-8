@@ -10,7 +10,7 @@ COPY --from=workspace mcp/mcp-lms /app/mcp/mcp-lms
 COPY --from=workspace nanobot-websocket-channel /app/nanobot-websocket-channel
 COPY pyproject.toml /app/nanobot/pyproject.toml
 COPY . /app/nanobot/
-
+COPY --from=workspace mcp/mcp-obs /app/mcp/mcp-obs
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --package nanobot
 
@@ -18,6 +18,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     cd /app/nanobot && \
     uv add nanobot-webchat --editable ../nanobot-websocket-channel/nanobot-webchat && \
     uv add mcp-webchat --editable ../nanobot-websocket-channel/mcp-webchat
+RUN --mount=type=cache,target=/root/.cache/uv \
+    cd /app/nanobot && \
+    uv add nanobot-webchat --editable ../nanobot-websocket-channel/nanobot-webchat && \
+    uv add mcp-webchat --editable ../nanobot-websocket-channel/mcp-webchat && \
+    uv add mcp-obs --editable ../mcp/mcp-obs
 ARG REGISTRY_PREFIX_DOCKER_HUB
 FROM ${REGISTRY_PREFIX_DOCKER_HUB}python:3.14.2-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1

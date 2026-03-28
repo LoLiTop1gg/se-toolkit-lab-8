@@ -195,16 +195,94 @@ The interactive UI isn't available right now. Here are the available labs — pl
 Just let me know which lab (e.g., "lab-04" or "Lab 04")!
 ## Task 3A — Structured logging
 
-<!-- Paste happy-path and error-path log excerpts, VictoriaLogs query screenshot -->
+## Task 3A — Structured logging
+
+### Happy-path log excerpt (request_started → request_completed, status 200)
+```
+2026-03-28 13:29:24,026 INFO [lms_backend.main] [main.py:62] [trace_id=96bf90919fd88435a21669f4475aed9a ...] - request_started
+2026-03-28 13:29:24,026 INFO [lms_backend.auth] [auth.py:30] [trace_id=96bf90919fd88435a21669f4475aed9a ...] - auth_success
+2026-03-28 13:29:24,026 INFO [lms_backend.db.items] [items.py:16] [trace_id=96bf90919fd88435a21669f4475aed9a ...] - db_query
+2026-03-28 13:29:24,079 INFO [lms_backend.main] [main.py:74] [trace_id=96bf90919fd88435a21669f4475aed9a ...] - request_completed
+INFO: 172.21.0.8:36626 - "GET /items/ HTTP/1.1" 200 OK
+```
+
+### Error-path log excerpt (db_query with error, postgres stopped)
+```
+socket.gaierror: [Errno -2] Name or service not known
+2026-03-28 13:36:22,815 ERROR [lms_backend.db.items] [items.py:23] [trace_id=77d645637c76ba6ee54b133081ad89c4 ...] - db_query
+2026-03-28 13:36:22,816 WARNING [lms_backend.routers.items] [items.py:23] [trace_id=77d645637c76ba6ee54b133081ad89c4 ...] - items_list_failed_as_not_found
+2026-03-28 13:36:22,817 INFO [lms_backend.main] [main.py:74] [trace_id=77d645637c76ba6ee54b133081ad89c4 ...] - request_completed
+INFO: 172.21.0.8:48490 - "GET /items/ HTTP/1.1" 404 Not Found
+```
+
+### VictoriaLogs query
+
+Query used: `_time:1h service.name:"Learning Management Service" severity:ERROR`
+
+Result: 8 error entries (unhandled_exception) from the period when PostgreSQL
+was stopped. VictoriaLogs makes it easy to filter by service and severity
+compared to grepping raw docker compose logs.
 
 ## Task 3B — Traces
 
-<!-- Screenshots: healthy trace span hierarchy, error trace -->
+### Healthy trace (trace_id: 96bf90919fd88435a21669f4475aed9a)
+
+Span hierarchy:
+- GET /items/ (root, 54ms, status 200)
+  - connect (postgres connection, 39ms)
+  - SELECT db-lab-8 (SQL query, 8ms)
+  - BEGIN;
+  - ROLLBACK;
+  - GET /items/ http send (response, status 200)
+
+### Error trace (trace_id: 77d645637c76ba6ee54b133081ad89c4)
+
+Span hierarchy:
+- GET /items/ (root, 276ms, status 404)
+  - connect (postgres connection, 268ms, ERROR)
+    - exception: socket.gaierror: [Errno -2] Name or service not known
+    - otel.status_description: gaierror: Name or service not known
+  - GET /items/ http send (response, status 404)
+
+The error trace shows that when PostgreSQL is stopped, the connect span fails
+with a DNS resolution error. The root span completes with status 404 instead
+of 200, and no SQL query is executed since the connection itself failed.
+## Task 3C — Observability MCP tools
 
 ## Task 3C — Observability MCP tools
 
-<!-- Paste agent responses to "any errors in the last hour?" under normal and failure conditions -->
+### MCP tools registered
 
+Four observability tools were implemented in `mcp/mcp-obs/src/mcp_obs/server.py`
+and successfully registered with the agent:
+
+- `mcp_obs_logs_search` — search logs using LogsQL query
+- `mcp_obs_logs_error_count` — count errors per service over a time window
+- `mcp_obs_traces_list` — list recent traces for a service
+- `mcp_obs_traces_get` — fetch a specific trace by ID
+
+Confirmed in nanobot logs: 
+
+MCP server 'obs': connected, 4 tools registered
+```
+
+### Normal conditions response
+
+Query: "Any LMS backend errors in the last 10 minutes?"
+
+Agent was unable to respond due to Qwen API being blocked by Aliyun WAF
+on the university VM network. The qwen-code-api logs show:
+`RuntimeError: Token refresh returned a non-JSON response` —
+the upstream Qwen authentication endpoint returns an HTML WAF page
+instead of a JSON token response. This is a network-level infrastructure
+issue, not a code issue.
+
+### Failure conditions response
+
+PostgreSQL was stopped and several LMS-backed requests were triggered.
+The error trace (trace_id: 77d645637c76ba6ee54b133081ad89c4) confirmed
+that the connect span failed with `socket.gaierror: Name or service not known`
+and the root span completed with status 404.
 ## Task 4A — Multi-step investigation
 
 <!-- Paste the agent's response to "What went wrong?" showing chained log + trace investigation -->

@@ -35,7 +35,17 @@ config["tools"]["mcpServers"]["webchat"] = {
         "WEBCHAT_ACCESS_TOKEN": access_key,
     }
 }
+# MCP obs
+config["tools"]["mcpServers"]["obs"] = {
+    "command": "python",
+    "args": ["-m", "mcp_obs.server"],
+    "env": {
+        "VICTORIA_LOGS_URL": os.environ.get("VICTORIA_LOGS_URL", "http://victorialogs:9428"),
+        "VICTORIA_TRACES_URL": os.environ.get("VICTORIA_TRACES_URL", "http://victoriatraces:10428"),
+    }
+}
 
+# Webchat channel
 # Webchat channel
 config["channels"]["webchat"] = {
     "enabled": True,
