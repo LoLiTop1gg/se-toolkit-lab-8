@@ -397,3 +397,4 @@ After PostgreSQL was restarted, the health check reported:
 - LMS status: Healthy
 - Items in database: 56
 - System looks healthy ✅
+Task 2: WebSocket channel and Flutter client
