@@ -285,15 +285,115 @@ that the connect span failed with `socket.gaierror: Name or service not known`
 and the root span completed with status 404.
 ## Task 4A — Multi-step investigation
 
-<!-- Paste the agent's response to "What went wrong?" showing chained log + trace investigation -->
+PostgreSQL was stopped and a request was made to list labs. Then asked "What went wrong?"
 
+**Agent response to "What labs are available?":**
+Unfortunately, the Learning Management Service (LMS) is currently unhealthy...
+Unfortunately, the Learning Management Service (LMS) is currently **unhealthy** and unavailable. 
+
+The backend is experiencing database connectivity issues - it cannot connect to its PostgreSQL database. The logs show errors like:
+- "connection is closed"
+- "Name or service not known" (DNS resolution failure for the database host)
+
+This is causing all LMS API calls (including listing labs) to fail with 404 or 500 errors.
+
+**What this means:**
+- I cannot retrieve the list of available labs right now
+- All LMS features (pass rates, scores, groups, timelines, top learners) are temporarily unavailable
+
+**Possible next steps:**
+1. Wait for the database service to be restored
+2. Check if the database container/service needs to be restarted
+3. Verify database connection configuration
+
+Would you like me to continue monitoring the LMS health status, or is there something else I can help you with in the meantime?
+**Agent response to "What went wrong?":**
+Based on the logs I checked, here's what went wrong...
+Based on the logs I checked, here's what went wrong with the Learning Management Service:
+
+## Root Cause: Database Connection Failure
+
+The LMS backend cannot connect to its PostgreSQL database. Two specific errors appeared:
+
+1. **DNS Resolution Failure**
+   - Error: `[Errno -2] Name or service not known`
+   - The backend cannot resolve the database hostname (likely `backend` or a db host)
+
+2. **Connection Closed**
+   - Error: `asyncpg.exceptions._base.InterfaceError: connection is closed`
+   - Existing database connections are being dropped
+
+## Impact
+
+- All LMS API endpoints are failing (404/500 errors)
+- Cannot list labs, learners, scores, or any course data
+- The sync pipeline also fails
+
+## Likely Causes
+
+- The PostgreSQL database container/service is down
+- Network connectivity issue between the LMS backend and database
+- Database hostname misconfiguration in environment variables
+- Database credentials or connection string issues
+
+## What Would Fix It
+
+1. Restart the database service/container
+2. Verify the database is accepting connections
+3. Check the LMS backend's database connection configuration (host, port, credentials)
+4. Ensure both services are on the same Docker network (if containerized)
+
+Would you like me to continue monitoring the service health, or do you have access to restart the database infrastructure?
+The agent correctly identified:
+- DNS resolution failure (Name or service not known)
+- asyncpg connection closed errors
+- All LMS endpoints returning 404/500
+- Root cause: PostgreSQL container stopped
 ## Task 4B — Proactive health check
 
-<!-- Screenshot or transcript of the proactive health report that appears in the Flutter chat -->
+Created a recurring health check using the agent's cron tool with the prompt:
+"Create a health check for this chat that runs every 2 minutes using your cron tool."
 
+Agent created cron job ID: 5447936d, interval: every 2 minutes.
+
+**Scheduled jobs list:**
+| Job | ID | Interval | Next Run |
+|-----|----|----------|----------|
+| LMS Health Check | 5447936d | Every 2 minutes | 2026-03-29 15:51:27 UTC |
+
+**Proactive health report (while PostgreSQL was stopped):**
+
+⚠️ LMS Backend Issue Detected
+The LMS backend is currently unhealthy and returning 404 errors.
+
+Recent Errors (last 2 minutes): 2
+- 16:03:04 — Database DNS failure: "Name or service not known"
+- 16:02:56 — Database connection closed
+
+Root Cause: The LMS backend cannot connect to its database.
+Impact: Cannot list labs, pass rates, scores, or learner data.
+
+The cron job was then removed after verification.
 ## Task 4C — Bug fix and recovery
 
-<!-- 1. Root cause identified
-     2. Code fix (diff or description)
-     3. Post-fix response to "What went wrong?" showing the real underlying failure
-     4. Healthy follow-up report or transcript after recovery -->
+### Root cause
+In `backend/src/lms_backend/routers/items.py`, the `get_items` handler
+caught all exceptions with a broad `except Exception` block and returned
+`HTTP 404 Not Found` instead of the real error. This hid the actual
+database connectivity failure.
+
+### Fix
+Changed the exception handler to return `HTTP 500 Internal Server Error`
+with the actual exception message, and changed log level from WARNING to ERROR.
+
+### Post-fix failure check
+After redeploy, asked "What went wrong?" with PostgreSQL stopped.
+Agent correctly reported HTTP 500 and `items_list_failed` event instead
+of the misleading 404.
+
+### Healthy follow-up
+After PostgreSQL was restarted, the health check reported:
+- Backend errors (last 2m): 0
+- LMS status: Healthy
+- Items in database: 56
+- System looks healthy ✅

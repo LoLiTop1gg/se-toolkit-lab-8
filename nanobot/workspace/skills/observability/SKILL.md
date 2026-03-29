@@ -1,6 +1,6 @@
 # Observability Skill
 
-Use this skill when the user asks about errors, logs, traces, or system health.
+Use this skill when the user asks about errors, logs, traces, system health, or "what went wrong".
 
 ## Tools available
 - `mcp_obs_logs_search` — search logs with LogsQL
@@ -8,16 +8,24 @@ Use this skill when the user asks about errors, logs, traces, or system health.
 - `mcp_obs_traces_list` — list recent traces for a service
 - `mcp_obs_traces_get` — get full span details for a trace
 
-## Reasoning flow
+## Investigation flow for "What went wrong?" or "Check system health"
 
-1. When asked about errors: call `mcp_obs_logs_error_count` first with service="Learning Management Service" and appropriate time_window (e.g. "10m")
-2. If errors found: call `mcp_obs_logs_search` to get details and extract trace_id values
-3. If trace_id found: call `mcp_obs_traces_get` to inspect the failing span
-4. Summarize findings concisely — do NOT dump raw JSON, describe what failed and where
+Always follow this exact sequence:
+1. Call `mcp_obs_logs_error_count` with service="Learning Management Service" and time_window="10m"
+2. Call `mcp_obs_logs_search` with query `_time:10m service.name:"Learning Management Service" severity:ERROR` to get recent error details and extract trace_id
+3. Call `mcp_obs_traces_get` with the most recent trace_id found in step 2
+4. Summarize in plain language — mention BOTH log evidence AND trace evidence, name the affected service and the root failing operation. Do NOT dump raw JSON.
+
+## Summary format
+- Which service failed
+- What the log shows (event name, severity)
+- What the trace shows (which span failed, what error)
+- What the HTTP response was (status code)
 
 ## Service names
 - LMS backend: `Learning Management Service`
 
-## Example queries
-- "Any errors in the last 10 minutes?" → logs_error_count + logs_search
-- "What went wrong?" → logs_search with severity:ERROR + traces_get
+## Important
+- Always use fresh recent time windows (10m or less)
+- The backend may misreport real database failures as 404 — check traces for the real root cause
+- Cite both log evidence and trace evidence in every investigation summary
