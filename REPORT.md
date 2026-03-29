@@ -397,6 +397,9 @@ After PostgreSQL was restarted, the health check reported:
 - LMS status: Healthy
 - Items in database: 56
 - System looks healthy ✅
+task3-review
+   
+task2-review
 
 task1-review
  
@@ -410,6 +413,7 @@ Task 3: Observability MCP tools
 Task 2: WebSocket channel and Flutter client
 
 Task 1: MCP LMS tools implementation
+main
 main
 main
 main
